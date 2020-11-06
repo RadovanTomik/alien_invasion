@@ -6,6 +6,8 @@ from bullet import Bullet
 from alien import Alien
 from time import sleep
 from game_stats import GameStats
+from button import Button
+from scoreboard import Scoreboard
 
 class AlienInavsion:
     """Overall class to manage game assets and behavior."""
@@ -25,9 +27,17 @@ class AlienInavsion:
         self.aliens = pygame.sprite.Group()
             
         self._create_fleet()
+        # Make the play button
+        self.play_button = Button(self, "Play")
+        self.sb = Scoreboard(self)
+       
          
     def run_game(self):
         """Start the main loop for the game."""
+        self.screen.fill(self.settings.bg_color)
+        self.play_button.draw_button()
+        pygame.display.flip()
+            
         while True:
             self._check_events()
             
@@ -42,12 +52,38 @@ class AlienInavsion:
         """Respond to keyboard and mouse presses"""
         for event in pygame.event.get():
                 if event.type == pygame.QUIT:
+                    pygame.quit()
                     sys.exit()
                     
                 elif event.type == pygame.KEYDOWN:
                     self._check_keydown_events(event)    
                 elif event.type == pygame.KEYUP:
                     self._check_keyup_events(event)
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    mouse_pos = pygame.mouse.get_pos()
+                    self._check_play_button(mouse_pos)
+                    
+    def _check_play_button(self, mouse_pos):
+        """Start a new game when player clicks play"""
+        button_clicked = self.play_button.rect.collidepoint(mouse_pos)
+        
+        if button_clicked and not self.stats.game_active:
+            # Reset game stats
+            self.settings.initialize_dynamic_settings()
+            self.stats.reset_stats()
+            self.stats.game_active = True
+            self.sb.prep_score()
+            
+            #Clear the screen
+            self.aliens.empty()
+            self.bullets.empty()
+            
+            # Create a new fleet and center it
+            self._create_fleet()
+            self.ship.center_ship()
+            
+            #Hide the mouse
+            pygame.mouse.set_visible(False)
                         
     def _check_keydown_events(self, event):
         """Respond to keypresses"""
@@ -85,10 +121,17 @@ class AlienInavsion:
         """ Respond to bullet and alien collision"""
         collisions = pygame.sprite.groupcollide(self.bullets,
                 self.aliens, True, True)
+                
+        if collisions:
+            for aliens in collisions.values():
+                self.stats.score += self.settings.alien_points * len(aliens)
+            self.sb.prep_score()
+            self.sb.check_high_score()
         if not self.aliens:
             #Destroy existing bullets and create new fleet
             self.bullets.empty()
             self._create_fleet()
+            self.settings.increase_speed()
             
     def _create_alien(self, alien_number, row_number):
         alien = Alien(self)
@@ -156,6 +199,7 @@ class AlienInavsion:
             sleep(0.5)
         else:
             self.stats.game_active = False
+            pygame.mouse.set_visible(True)
         
     def _check_aliens_bottom(self):
         """Check if any aliens made it to the bottom"""
@@ -163,7 +207,7 @@ class AlienInavsion:
         for alien in self.aliens.sprites():
             if alien.rect.bottom >= screen_rect.bottom:
                 #Treat it as if it were a hit
-                _ship_hit()
+                self._ship_hit()
                 break
         
     def _update_screen(self):
@@ -173,6 +217,12 @@ class AlienInavsion:
         for bullet in self.bullets.sprites():
             bullet.draw_bullet()
         self.aliens.draw(self.screen)
+        
+        #Draw the scoreboard
+        self.sb.show_score()
+        # Draw the play button if game is inactive
+        if not self.stats.game_active:
+            self.play_button.draw_button()
         # Make the most recently drawn screen visible
         pygame.display.flip()
         
